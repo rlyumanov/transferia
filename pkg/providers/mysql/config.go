@@ -24,6 +24,8 @@ type Config struct {
 	FailOnDecimal bool
 	ParseTime     bool
 
+	SkipNoPrimaryKeyTables bool
+
 	TimestampStringLocation *time.Location
 
 	// SemiSyncEnabled enables semi-sync or not.
