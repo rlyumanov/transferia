@@ -50,6 +50,7 @@ type Canal struct {
 	tableLock          sync.RWMutex
 	tables             map[string]*mysql_schema.Table
 	errorTablesGetTime map[string]time.Time
+	noPrimaryKeyTables map[string]bool
 
 	tableMatchCache map[string]bool
 
@@ -78,6 +79,7 @@ func NewCanal(cfg *Config) (*Canal, error) {
 	c.eventHandler = &DummyEventHandler{}
 	c.parser = parser.New()
 	c.tables = make(map[string]*mysql_schema.Table)
+	c.noPrimaryKeyTables = make(map[string]bool)
 	if c.cfg.DiscardNoMetaRowEvent {
 		c.errorTablesGetTime = make(map[string]time.Time)
 	}
@@ -215,8 +217,12 @@ func (c *Canal) GetTable(db string, table string) (*mysql_schema.Table, error) {
 	}
 	c.tableLock.RLock()
 	t, ok := c.tables[key]
+	noPrimaryKey := c.noPrimaryKeyTables[key]
 	c.tableLock.RUnlock()
 
+	if noPrimaryKey {
+		return nil, xerrors.Errorf("%w", ErrExcludedTable)
+	}
 	if ok {
 		return t, nil
 	}
@@ -267,6 +273,13 @@ func (c *Canal) GetTable(db string, table string) (*mysql_schema.Table, error) {
 		return nil, xerrors.Errorf("failed to get table: %w", err)
 	}
 	c.logTable(t)
+	if c.cfg.SkipNoPrimaryKeyTables && len(t.PKColumns) == 0 {
+		c.tableLock.Lock()
+		c.noPrimaryKeyTables[key] = true
+		c.tableLock.Unlock()
+		c.logger.Warnf("table %s has no primary key, its row events are skipped until the transfer is restarted", key)
+		return nil, xerrors.Errorf("%w", ErrExcludedTable)
+	}
 	if c.cfg.FailOnDecimal {
 		if decimalColumnIndex := findDecimalColumn(t); decimalColumnIndex != -1 {
 			return nil, xerrors.Errorf("table %q contains column %q of type %s. Columns of decimal types currently are not supported. Please exclude the table from the transfer", t.Name, t.Columns[decimalColumnIndex].Name, t.Columns[decimalColumnIndex].RawType)

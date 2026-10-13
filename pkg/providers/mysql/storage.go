@@ -52,6 +52,7 @@ type Storage struct {
 	preSteps                *MysqlDumpSteps
 	consistentSnapshot      bool
 	database                string
+	skipNoPrimaryKeyTables  bool
 }
 
 func (s *Storage) Close() {
@@ -497,7 +498,13 @@ func (s *Storage) tableList(ctx context.Context, includeTableFilter abstract.Inc
 		result[tID] = tInfo
 	}
 
-	return model.FilteredMap(result, includeTableFilter), nil
+	result = model.FilteredMap(result, includeTableFilter)
+	if s.skipNoPrimaryKeyTables {
+		if err := s.excludeNoPrimaryKeyTables(ctx, result); err != nil {
+			return nil, xerrors.Errorf("Cannot exclude tables without primary key: %w", err)
+		}
+	}
+	return result, nil
 }
 
 func (s *Storage) LoadSchema() (schema abstract.DBSchema, err error) {

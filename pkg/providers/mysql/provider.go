@@ -158,6 +158,7 @@ func (p *Provider) storage(ctx context.Context) (*Storage, error) {
 		return nil, xerrors.Errorf("unable to construct storage: %w", err)
 	}
 	res.IsHomo = src.IsHomo
+	res.skipNoPrimaryKeyTables = !src.UseFakePrimaryKey && !p.transfer.SnapshotOnly()
 	return res, nil
 }
 

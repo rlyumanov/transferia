@@ -420,6 +420,11 @@ func (p *publisher) Run(sink abstract.AsyncSink) error {
 	if err != nil {
 		return xerrors.Errorf("schema filter failed: %w", err)
 	}
+	if !p.config.UseFakePrimaryKey {
+		if err := p.excludeNoPrimaryKeyTables(sch); err != nil {
+			return xerrors.Errorf("failed to exclude tables without primary key: %w", err)
+		}
+	}
 	if err := sch.CheckPrimaryKeys(p.config); err != nil {
 		p.handler.metrics.Fatal.Inc()
 		return abstract.NewFatalError(err)
@@ -644,6 +649,7 @@ func NewSource(src *MysqlSource, transferID string, objects *model.DataObjects, 
 	config.TimestampStringLocation = connectionParams.Location
 	config.ServerID = src.ServerID
 	config.FailOnDecimal = failOnDecimal
+	config.SkipNoPrimaryKeyTables = !src.UseFakePrimaryKey
 	includeObjects, err := abstract.BuildIncludeMap(objects.GetIncludeObjects(), ProviderType)
 	if err != nil {
 		return nil, abstract.NewFatalError(xerrors.Errorf("to build exclude map: %w", err))
